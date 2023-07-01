@@ -1,34 +1,24 @@
-use intercom::*;
+use intercom::prelude::*;
+use intercom::interfaces::IUnknown;
 
 mod iid;
 use iid::*;
 
-// IComponentData GUID from MMC SDK
-#[com_interface(com_iid = "{955AB28A-5218-11D0-A985-00C04FD8D565}")]
-pub trait IComponentData: IUnknown {
-    fn Initialize(&self, pUnknown: dyn IUnknown) -> ComResult<i32>;
+// NOTE: NodeType GUID for "Fan" node: 977821db-5a85-4130-91c8-f0ad8636608e
 
-    fn CreateComponent(&self, ppComponent: LPCOMPONENT) -> ComResult<i32>;
+com_library!(
+    class MMCSnapIn
+);
 
-    fn Notify(&self, lpDataObject: LPDATAOBJECT, event: MMC_NOTIFY_TYPE, arg: LPARAM, param: LPARAM) -> ComResult<i32>;
-
-    fn Destroy(&self) -> ComResult<i32>;
-
-    fn QueryDataObject(&self, cookie: MMC_COOKIE, r#type: DATA_OBJECT_TYPES, ppDataObject: LPDATAOBJECT) -> ComResult<i32>;
-
-    fn GetDisplayInfo(&self, pScopeDataItem: SCOPEDATAITEM) -> ComResult<i32>;
-
-    fn CompareObjects(&self, lpDataObjectA: LPDATAOBJECT, lpDataObjectB: LPDATAOBJECT) -> ComResult<i32>;
-}
-
-
-#[com_class(clsid = "{55ace359-cfbf-475f-a891-d1203894604c}", ComSnapIn, IComponentData)]
+#[com_class(clsid = "55ace359-cfbf-475f-a891-d1203894604c", MMCSnapIn, IComponentData)]
 #[derive(Default)]
-pub struct ComSnapIn {
-    // Any necessary state...
-}
+pub struct MMCSnapIn;
 
 #[com_interface]
-impl IComponentData for ComSnapIn {
-
+impl IComponentData for MMCSnapIn {
+    fn initialize(&self, _console: &ComItf<dyn IUnknown>) -> ComResult<i32> {
+        // Not doing anything yet
+        Ok(0)
+    }
+    // ... rest of the methods
 }

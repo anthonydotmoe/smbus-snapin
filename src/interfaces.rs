@@ -56,37 +56,37 @@ pub trait IComponent: IUnknown {
 
 #[com_interface(com_iid = "43136EB1-D36C-11CF-ADBC-00AA00A80033")]
 pub trait IConsole: IUnknown {
-    fn SetHeader(&self, ) -> ComResult<i32>;
+    fn set_header(&self, ) -> ComResult<i32>;
 
     //Sets IConsoles toolbar interface
-    fn SetToolbar(&self, ) -> ComResult<i32>;
+    fn set_toolbar(&self, ) -> ComResult<i32>;
 
     //Queries IConsoles user provided IUnknown
-    fn QueryResultView(&self, ) -> ComResult<i32>;
+    fn query_result_view(&self, ) -> ComResult<i32>;
 
     //Queries the IConsole provided image list for the scope pane.
-    fn QueryScopeImageList(&self, ) -> ComResult<i32>;
+    fn query_scope_image_list(&self, ) -> ComResult<i32>;
 
     //Queries the IConsole provided image list for the result pane.
-    fn QueryResultImageList(&self, ) -> ComResult<i32>;
+    fn query_result_image_list(&self, ) -> ComResult<i32>;
 
     //Generates a notification to update view(s) because of content change
-    fn UpdateAllViews(&self, ) -> ComResult<i32>;
+    fn update_all_views(&self, ) -> ComResult<i32>;
 
     //Displays a message box
-    fn MessageBox(&self, ) -> ComResult<i32>;
+    fn message_box(&self, ) -> ComResult<i32>;
 
     //Query for the IConsoleVerb.
-    fn QueryConsoleVerb(&self, ) -> ComResult<i32>;
+    fn query_console_verb(&self, ) -> ComResult<i32>;
 
     //Selects the given scope item.
-    fn SelectScopeItem(&self, ) -> ComResult<i32>;
+    fn select_scope_item(&self, ) -> ComResult<i32>;
 
     //Returns handle to the main frame window.
-    fn GetMainWindow(&self, ) -> ComResult<i32>;
+    fn get_main_window(&self, ) -> ComResult<i32>;
 
     //Create a new window rooted at the scope item specified by hScopeItem.
-    fn NewWindow(&self, ) -> ComResult<i32>;
+    fn new_window(&self, ) -> ComResult<i32>;
 }
 
 #[com_interface(com_iid = "255F18CC-65DB-11D1-A7DC-00C04FD8D565")]
@@ -105,32 +105,32 @@ pub trait IConsole2: IConsole {
 #[com_interface(com_iid = "BEDEB620-F24D-11cf-8AFC-00AA003CA9F6")]
 pub trait IConsoleNamespace: IUnknown {
     // Allows the snap-in to insert a single item into the scope view.
-    fn InsertItem(&self, ) -> ComResult<i32>;
+    fn insert_item(&self, ) -> ComResult<i32>;
 
     // Allows the snap-in to delete a single item from the scope view.
-    fn DeleteItem(&self, ) -> ComResult<i32>;
+    fn delete_item(&self, ) -> ComResult<i32>;
 
     // Allows the snap-in to set a single scope view item.
-    fn SetItem(&self, ) -> ComResult<i32>;
+    fn set_item(&self, ) -> ComResult<i32>;
 
     // Allows the snap-in to get a single scope view item.
-    fn GetItem(&self, ) -> ComResult<i32>;
+    fn get_item(&self, ) -> ComResult<i32>;
 
     // The handle of the child item if successful, otherwise NULL.
-    fn GetChildItem(&self, ) -> ComResult<i32>;
+    fn get_child_item(&self, ) -> ComResult<i32>;
 
     // The handle of the next item if successful, otherwise NULL.
-    fn GetNextItem(&self, ) -> ComResult<i32>;
+    fn get_next_item(&self, ) -> ComResult<i32>;
 
     // The handle of the parent item if successful, otherwise NULL.
-    fn GetParentItem(&self, ) -> ComResult<i32>;
+    fn get_parent_item(&self, ) -> ComResult<i32>;
 }
 
 #[com_interface(com_iid = "255F18CC-65DB-11D1-A7DC-00C04FD8D565")]
 pub trait IConsoleNamespace2: IConsoleNamespace {
     // Allows the snap-in to expand an item in the console namespace.
-    fn Expand(&self, ) -> ComResult<i32>;
+    fn expand(&self, ) -> ComResult<i32>;
 
     // Add a dynamic extension to a selected node
-    fn AddExtension(&self, ) -> ComResult<i32>;
+    fn add_extension(&self, ) -> ComResult<i32>;
 }

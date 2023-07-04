@@ -2,6 +2,7 @@
 name = "comtest"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -10,4 +11,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 intercom = "0.4.0"
-uuid = "1.4.0"
+simple-logging = "2.0"
+log = "0.4"
+winapi = {version = "0.3.9", features = ["libloaderapi", "windef", "winuser"]}
+
+[build_dependencies]
+winres = "0.1"

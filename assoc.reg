@@ -3,7 +3,7 @@ Windows Registry Editor Version 5.00
 [HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\MMC\Snapins\{55ace359-cfbf-475f-a891-d1203894604c}]
 @="MMCSnapIn"
 "NameString"="MMCSnapIn"
-"About"="{55ace359-cfbf-475f-a891-d1203894604c}"
+"About"="{55ace359-cfbf-475f-a891-d1203894604d}"
 "Version"="1.0"
 
 [HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\MMC\Snapins\{55ace359-cfbf-475f-a891-d1203894604c}\NodeTypes]

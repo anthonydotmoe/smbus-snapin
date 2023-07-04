@@ -1,0 +1,31 @@
+[00:00:00.000] (c9c) TRACE  [0x56a7e50] ClassFactory::query_interface(00000001-0000-0000-C000-000000000046)
+[00:00:00.001] (c9c) TRACE  [0x56a7e50] ClassFactory::query_interface(00000001-0000-0000-C000-000000000046) -> IClassFactory (Automation) [0x56a7e58]
+[00:00:00.002] (c9c) TRACE  [0x56a7e50, through 0x56a7e58] Serving intercom::classfactory::ClassFactory<comtest::MMCSnapInAbout>::create_instance
+[00:00:00.003] (c9c) TRACE  [0x56a8270] MMCSnapInAbout::query_interface(1245208C-A151-11D0-A7D7-00C04FD909DD)
+[00:00:00.004] (c9c) TRACE  [0x56a8270] MMCSnapInAbout::query_interface(1245208C-A151-11D0-A7D7-00C04FD909DD) -> ISnapinAbout (Automation) [0x56a8278]
+[00:00:00.005] (c9c) TRACE  [0x56a7e50, through 0x56a7e58] Serving intercom::classfactory::ClassFactory<comtest::MMCSnapInAbout>::create_instance, OK
+[00:00:00.005] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::add_ref
+[00:00:00.006] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::release
+[00:00:00.006] (c9c) TRACE  [0x56a7e50, through 0x56a7e58] Serving intercom::classfactory::ClassFactory<comtest::MMCSnapInAbout>::release
+[00:00:00.006] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::query_interface
+[00:00:00.006] (c9c) TRACE  [0x56a8270] MMCSnapInAbout::query_interface(1245208C-A151-11D0-A7D7-00C04FD909DD)
+[00:00:00.007] (c9c) TRACE  [0x56a8270] MMCSnapInAbout::query_interface(1245208C-A151-11D0-A7D7-00C04FD909DD) -> ISnapinAbout (Automation) [0x56a8278]
+[00:00:00.007] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::release
+[00:00:00.007] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::query_interface
+[00:00:00.007] (c9c) TRACE  [0x56a8270] MMCSnapInAbout::query_interface(1245208C-A151-11D0-A7D7-00C04FD909DD)
+[00:00:00.008] (c9c) TRACE  [0x56a8270] MMCSnapInAbout::query_interface(1245208C-A151-11D0-A7D7-00C04FD909DD) -> ISnapinAbout (Automation) [0x56a8278]
+[00:00:00.009] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::release
+[00:00:00.009] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::get_static_folder_image
+[00:00:00.009] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::get_static_folder_image, OK
+[00:00:00.009] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::get_snapin_image
+[00:00:00.010] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::get_snapin_image, OK
+[00:00:00.010] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::get_snapin_description
+[00:00:00.010] (c9c) TRACE  BString::into_foreign_output<Automation>
+[00:00:00.010] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::get_snapin_description, OK
+[00:00:00.010] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::get_provider
+[00:00:00.011] (c9c) TRACE  BString::into_foreign_output<Automation>
+[00:00:00.011] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::get_provider, OK
+[00:00:00.011] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::get_snapin_version
+[00:00:00.011] (c9c) TRACE  BString::into_foreign_output<Automation>
+[00:00:00.011] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::get_snapin_version, OK
+[00:00:00.011] (c9c) TRACE  [0x56a8270, through 0x56a8278] Serving comtest::MMCSnapInAbout::release

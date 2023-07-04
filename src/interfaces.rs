@@ -1,4 +1,20 @@
-use intercom::{prelude::*, IUnknown};
+use intercom::{prelude::*, IUnknown, BString};
+use winapi::shared::windef::{COLORREF, HBITMAP, HICON};
+
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternOutput)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct ComHBITMAP(pub HBITMAP);
+
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternOutput)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct ComCOLORREF(pub COLORREF);
+
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternOutput)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct ComHICON(pub HICON);
 
 /*
 #[com_interface(com_iid = "0000010e-0000-0000-C000-000000000046")]
@@ -133,4 +149,22 @@ pub trait IConsoleNamespace2: IConsoleNamespace {
 
     // Add a dynamic extension to a selected node
     fn add_extension(&self, ) -> ComResult<i32>;
+}
+
+#[com_interface(com_iid = "1245208C-A151-11D0-A7D7-00C04FD909DD")]
+pub trait ISnapinAbout: IUnknown {
+    // Text for the snap-in description box
+    fn get_snapin_description(&self) -> ComResult<BString>;
+    
+    // Provider name
+    fn get_provider(&self) -> ComResult<BString>;
+    
+    // Version number for the snap-in
+    fn get_snapin_version(&self) -> ComResult<BString>;
+    
+    // Main icon for about box
+    fn get_snapin_image(&self) -> ComResult<ComHICON>;
+    
+    // Static folder images for scope and result panes
+    fn get_static_folder_image(&self) -> ComResult<(ComHBITMAP, ComHBITMAP, ComHBITMAP, ComCOLORREF)>;
 }

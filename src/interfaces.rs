@@ -16,89 +16,100 @@ pub struct ComCOLORREF(pub COLORREF);
 #[repr(transparent)]
 pub struct ComHICON(pub HICON);
 
-/*
 #[com_interface(com_iid = "0000010e-0000-0000-C000-000000000046")]
 pub trait IDataObject: IUnknown {
-    fn GetData(&self, pformatetcIn: &FORMATETC, pmedium: &STGMEDIUM) -> ComResult<i32>;
+    fn get_data(&self, ) -> ComResult<()>;
+    fn get_data_here(&self, ) -> ComResult<()>;
+    fn query_get_data(&self, ) -> ComResult<()>;
+    fn get_canonical_format(&self, ) -> ComResult<()>;
+    fn set_data(&self, ) -> ComResult<()>;
+    fn enum_format_etc(&self, ) -> ComResult<()>;
+    fn d_advise(&self, ) -> ComResult<()>;
+    fn d_unadvise(&self, ) -> ComResult<()>;
+    fn enum_d_advise(&self) -> ComResult<()>;
 }
-*/
 
-// IComponentData GUID from MMC SDK
 #[com_interface(com_iid = "955AB28A-5218-11D0-A985-00C04FD8D565")]
 pub trait IComponentData: IUnknown {
-    fn initialize(&mut self, lp_unknown: &ComItf<dyn IUnknown>) -> ComResult<i32>;
+    // Snap-in entry point. Can QI for IConsole & IConsoleNameSpace
+    fn initialize(&mut self, lp_unknown: &ComItf<dyn IUnknown>) -> ComResult<()>;
 
-    /* TO BE IMPLEMENTED
-    fn CreateComponent(&self, ppComponent: *mut ComPtr<dyn IComponent>) -> ComResult<i32>;
+    // Create a Component for this ComponentData
+    fn create_component(&self) -> ComResult<ComRc<dyn IComponent>>;
 
-    fn Notify(&self, lpDataObject: LPDATAOBJECT, event: MMC_NOTIFY_TYPE, arg: LPARAM, param: LPARAM) -> ComResult<i32>;
+    // User actions
+    fn notify(&self, lp_dataobject: &ComItf<dyn IDataObject>, event: u32, arg: i64, param: i64) -> ComResult<()>;
 
-    fn Destroy(&self) -> ComResult<i32>;
+    // Release cookies associated with the children of a specific node
+    fn destroy(&self) -> ComResult<()>;
 
-    fn QueryDataObject(&self, cookie: MMC_COOKIE, r#type: DATA_OBJECT_TYPES, ppDataObject: LPDATAOBJECT) -> ComResult<i32>;
+    // Returns a data object which may be used to retrieve the context information for the specified cookie
+    fn query_data_object(&self, ) -> ComResult<()>;
 
-    fn GetDisplayInfo(&self, pScopeDataItem: SCOPEDATAITEM) -> ComResult<i32>;
+    // Get display info for the name space item
+    fn get_display_info(&self, ) -> ComResult<()>;
 
-    fn CompareObjects(&self, lpDataObjectA: LPDATAOBJECT, lpDataObjectB: LPDATAOBJECT) -> ComResult<i32>;
-    */
+    // The snap-in's compare function for two data objects
+    fn compare_objects(&self, ) -> ComResult<()>;
 }
 
 #[com_interface(com_iid = "43136eb2-d36c-11cf-adbc-00aa00a80033")]
 pub trait IComponent: IUnknown {
     // provides an entry point to the console.
-    fn initialize(&self, ) -> ComResult<i32>;
+    fn initialize(&self, ) -> ComResult<()>;
 
     // notifies the snap-in of actions taken by the user.
-    fn notify(&self, ) -> ComResult<i32>;
+    fn notify(&self, ) -> ComResult<()>;
 
     // releases all references to the console that are held by this component.
-    fn destroy(&self, ) -> ComResult<i32>;
+    fn destroy(&self, ) -> ComResult<()>;
 
     // returns a data object that can be used to retrieve context information
     // for the specified cookie.
-    fn query_data_object(&self, ) -> ComResult<i32>;
+    fn query_data_object(&self, ) -> ComResult<()>;
  
     // determines what the result pane view should be.
-    fn get_result_view_type(&self, ) -> ComResult<i32>;
+    fn get_result_view_type(&self, ) -> ComResult<()>;
 
     // retrieves display information for an item in the result pane.
-    fn get_display_info(&self, ) -> ComResult<i32>;
+    fn get_display_info(&self, ) -> ComResult<()>;
 
     // enables a snap-in to compare two data objects acquired through
     // IComponent::QueryDataObject. Be aware that data objects can be acquired
     // from two different instances of IComponent.
-    fn compare_objects(&self, ) -> ComResult<i32>;
+    fn compare_objects(&self, ) -> ComResult<()>;
 }
 
 #[com_interface(com_iid = "43136EB1-D36C-11CF-ADBC-00AA00A80033")]
 pub trait IConsole: IUnknown {
-    fn set_header(&self, ) -> ComResult<i32>;
+    // Sets IConsoles header interface
+    fn set_header(&self, ) -> ComResult<()>;
 
-    //Sets IConsoles toolbar interface
+    // Sets IConsoles toolbar interface
     fn set_toolbar(&self, ) -> ComResult<i32>;
 
-    //Queries IConsoles user provided IUnknown
+    // Queries IConsoles user provided IUnknown
     fn query_result_view(&self, ) -> ComResult<i32>;
 
-    //Queries the IConsole provided image list for the scope pane.
+    // Queries the IConsole provided image list for the scope pane.
     fn query_scope_image_list(&self, ) -> ComResult<i32>;
 
-    //Queries the IConsole provided image list for the result pane.
+    // Queries the IConsole provided image list for the result pane.
     fn query_result_image_list(&self, ) -> ComResult<i32>;
 
-    //Generates a notification to update view(s) because of content change
+    // Generates a notification to update view(s) because of content change
     fn update_all_views(&self, ) -> ComResult<i32>;
 
-    //Displays a message box
+    // Displays a message box
     fn message_box(&self, ) -> ComResult<i32>;
 
-    //Query for the IConsoleVerb.
+    // Query for the IConsoleVerb.
     fn query_console_verb(&self, ) -> ComResult<i32>;
 
-    //Selects the given scope item.
+    // Selects the given scope item.
     fn select_scope_item(&self, ) -> ComResult<i32>;
 
-    //Returns handle to the main frame window.
+    // Returns handle to the main frame window.
     fn get_main_window(&self, ) -> ComResult<i32>;
 
     //Create a new window rooted at the scope item specified by hScopeItem.

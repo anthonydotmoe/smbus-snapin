@@ -35,6 +35,7 @@ pub enum MmcNotifyType {
     CanPasteOutOfProc  = 0x8023,
 }
 
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternOutput)]
 #[repr(i32)]
 #[derive(Debug)]
 pub enum MmcDataObjectType {

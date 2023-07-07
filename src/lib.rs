@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use intercom::{prelude::*, BString};
 use intercom::interfaces::IUnknown;
 use winapi::shared::windef::HICON;
@@ -9,7 +11,7 @@ pub mod mmc;
 
 use interfaces::*;
 
-use crate::mmc::MmcNotifyType;
+use crate::mmc::{MmcNotifyType, MmcDataObjectType};
 
 
 // NOTE: NodeType GUID for "Fan" node: 977821db-5a85-4130-91c8-f0ad8636608e
@@ -36,6 +38,8 @@ fn on_load() {
 struct MMCSnapIn {
     console: Option<ComRc<dyn IConsole>>,
     console_namespace: Option<ComRc<dyn IConsoleNamespace>>,
+    nodes: HashMap<isize, ComRc<dyn IDataObject>>,
+    next_cookie: isize,
 }
 
 impl IComponentData for MMCSnapIn {
@@ -53,7 +57,7 @@ impl IComponentData for MMCSnapIn {
                 log::debug!("Got: {:p} for IConsole", console.as_raw_iunknown());
                 self.console = Some(console.clone());
             },
-            Err(_e) => { log::error!("Error: QI for IConsole"); }
+            Err(e) => { log::error!("Error {:?}: QI for IConsole", e); }
         }
         
         match console_namespace {
@@ -61,8 +65,13 @@ impl IComponentData for MMCSnapIn {
                 log::debug!("Got {:p} for IConsoleNamespace", console_namespace.as_raw_iunknown());
                 self.console_namespace = Some(console_namespace.clone())
             },
-            Err(_e) => { log::error!("Error: QI for IConsoleNamespace"); }
+            Err(e) => { log::error!("Error {:?}: QI for IConsoleNamespace", e); }
         }
+        
+        // Create the root node
+        let root_node = MMCSnapInNode { node_type: MMCSnapInNodeType::Root };
+        self.nodes.insert(0, ComRc::from(ComBox::new(root_node)));
+        self.next_cookie = 1;
         
         Ok(())
     }
@@ -82,9 +91,37 @@ impl IComponentData for MMCSnapIn {
         Ok(())
     }
     
-    fn query_data_object(&self,) -> ComResult<()> {
-        Ok(())
+    fn query_data_object(&mut self, cookie: isize, view_type: i32) -> ComResult<ComRc<dyn IDataObject>> {
+        let view_type: MmcDataObjectType = unsafe { std::mem::transmute(view_type) };
+    
+        log::debug!("QueryDataObject: cookie: {}, ppviewtype: {:?}", cookie, view_type);
+            
+        match self.nodes.get(&cookie) {
+            Some(data_object) => {
+                Ok(data_object.clone())
+            }
+            None => {
+                Err(ComError::E_POINTER)
+            }
+        }
     }
+    
+    /*
+    fn query_data_object(&mut self, cookie: isize, view_type: i32) -> ComResult<ComRc<dyn IDataObject>> {
+        let view_type: MmcDataObjectType = unsafe { std::mem::transmute(view_type) };
+
+        log::debug!("QueryDataObject: cookie: {}, ppviewtype: {:?}", cookie, view_type);
+        
+        match self.nodes.contains_key(&cookie) {
+            true => {
+                Ok(ComRc::from(ComBox::new((self.nodes[&cookie]))))
+            }
+            false => {
+                Err(ComError::E_POINTER)
+            }
+        }
+    }
+    */
     
     fn get_display_info(&self,) -> ComResult<()> {
         Ok(())
@@ -133,6 +170,82 @@ impl IComponent for MMCSnapInComponent {
     }
     
     fn compare_objects(&self,) -> ComResult<()> {
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+enum MMCSnapInNodeType {
+    Root,
+    Fan,
+}
+
+impl Default for MMCSnapInNodeType {
+    fn default() -> Self {
+        MMCSnapInNodeType::Fan
+    }
+}
+
+#[com_class(IDataObject)]
+#[derive(Default)]
+struct MMCSnapInNode {
+    node_type: MMCSnapInNodeType,
+}
+
+impl MMCSnapInNode {
+    pub fn new() -> Self {
+        MMCSnapInNode::default()
+    }
+}
+
+#[repr(u16)]
+#[derive(Debug)]
+enum ClipboardFormat {
+    TheFormat = 0,
+}
+
+impl IDataObject for MMCSnapInNode {
+    fn get_data(&self,) -> ComResult<()> {
+        Ok(())
+    }
+    
+    fn get_data_here(&self,pformatetc: *const ComFORMATETC, pmedium: *mut ComSTGMEDIUM) -> ComResult<()> {
+        /*
+        let clip_format: ClipboardFormat = unsafe { std::mem::transmute((*pformatetc).0.cfFormat) };
+        match (*pformatetc).0.cfFormat {
+        }
+        */
+        
+        log::debug!("Got Clipformat: {}", unsafe { (*pformatetc).0.cfFormat });
+
+        Ok(())
+    }
+    
+    fn query_get_data(&self,) -> ComResult<()> {
+        Ok(())
+    }
+    
+    fn get_canonical_format(&self,) -> ComResult<()> {
+        Ok(())
+    }
+    
+    fn set_data(&self,) -> ComResult<()> {
+        Ok(())
+    }
+    
+    fn enum_format_etc(&self,) -> ComResult<()> {
+        Ok(())
+    }
+    
+    fn d_advise(&self,) -> ComResult<()> {
+        Ok(())
+    }
+    
+    fn d_unadvise(&self,) -> ComResult<()> {
+        Ok(())
+    }
+    
+    fn enum_d_advise(&self) -> ComResult<()> {
         Ok(())
     }
 }

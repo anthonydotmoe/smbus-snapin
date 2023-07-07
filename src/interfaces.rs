@@ -1,5 +1,11 @@
+use std::isize;
+
 use intercom::{prelude::*, IUnknown, BString};
 use winapi::shared::windef::{COLORREF, HBITMAP, HICON};
+
+use windows::Win32::System::Com::{FORMATETC, STGMEDIUM};
+
+use crate::mmc;
 
 #[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternOutput)]
 #[allow(non_camel_case_types)]
@@ -16,10 +22,20 @@ pub struct ComCOLORREF(pub COLORREF);
 #[repr(transparent)]
 pub struct ComHICON(pub HICON);
 
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternInput)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct ComFORMATETC(pub FORMATETC);
+
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternInput, intercom::ExternOutput)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct ComSTGMEDIUM(pub STGMEDIUM);
+
 #[com_interface(com_iid = "0000010e-0000-0000-C000-000000000046")]
 pub trait IDataObject: IUnknown {
     fn get_data(&self, ) -> ComResult<()>;
-    fn get_data_here(&self, ) -> ComResult<()>;
+    fn get_data_here(&self, pformatetc: *const ComFORMATETC, pmedium: *mut ComSTGMEDIUM) -> ComResult<()>;
     fn query_get_data(&self, ) -> ComResult<()>;
     fn get_canonical_format(&self, ) -> ComResult<()>;
     fn set_data(&self, ) -> ComResult<()>;
@@ -44,7 +60,7 @@ pub trait IComponentData: IUnknown {
     fn destroy(&self) -> ComResult<()>;
 
     // Returns a data object which may be used to retrieve the context information for the specified cookie
-    fn query_data_object(&self, ) -> ComResult<()>;
+    fn query_data_object(&mut self, cookie: isize, r#type: i32) -> ComResult<ComRc<dyn IDataObject>>;
 
     // Get display info for the name space item
     fn get_display_info(&self, ) -> ComResult<()>;

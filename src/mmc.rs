@@ -1,3 +1,6 @@
+use intercom::ComError;
+use intercom::raw::HRESULT;
+
 #[repr(i32)]
 #[derive(Debug)]
 pub enum MmcNotifyType {
@@ -44,3 +47,13 @@ pub enum MmcDataObjectType {
     SnapinManager = 0x8002,
     Uninitialized = 0xffff,
 }
+
+pub const DV_E_FORMATETC: ComError = ComError{
+    hresult: HRESULT { hr: windows::Win32::Foundation::DV_E_FORMATETC.0 },
+    error_info: None,
+};
+
+pub const DV_E_TYMED: ComError = ComError{
+    hresult: HRESULT { hr: windows::Win32::Foundation::DV_E_TYMED.0 },
+    error_info: None,
+};

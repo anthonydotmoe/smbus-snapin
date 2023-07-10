@@ -1,9 +1,11 @@
 use std::isize;
 
-use intercom::{prelude::*, IUnknown, BString};
-use winapi::shared::windef::{COLORREF, HBITMAP, HICON};
+use intercom::{prelude::*, IUnknown, BString, BStr};
 
 use windows::Win32::System::Com::{FORMATETC, STGMEDIUM};
+use windows::Win32::Foundation::COLORREF;
+use windows::Win32::UI::WindowsAndMessaging::HICON;
+use windows::Win32::Graphics::Gdi::HBITMAP;
 
 use crate::mmc;
 
@@ -72,20 +74,20 @@ pub trait IComponentData: IUnknown {
 #[com_interface(com_iid = "43136eb2-d36c-11cf-adbc-00aa00a80033")]
 pub trait IComponent: IUnknown {
     // provides an entry point to the console.
-    fn initialize(&self, ) -> ComResult<()>;
+    fn initialize(&self, lp_unknown: &ComItf<dyn IUnknown>) -> ComResult<()>;
 
     // notifies the snap-in of actions taken by the user.
-    fn notify(&self, ) -> ComResult<()>;
+    fn notify(&self, lp_dataobject: &ComItf<dyn IDataObject>, event: u32, arg: i64, param: i64) -> ComResult<()>;
 
     // releases all references to the console that are held by this component.
-    fn destroy(&self, ) -> ComResult<()>;
+    fn destroy(&self) -> ComResult<()>;
 
     // returns a data object that can be used to retrieve context information
     // for the specified cookie.
-    fn query_data_object(&self, ) -> ComResult<()>;
+    fn query_data_object(&mut self, cookie: isize, r#type: i32) -> ComResult<ComRc<dyn IDataObject>>;
  
     // determines what the result pane view should be.
-    fn get_result_view_type(&self, ) -> ComResult<()>;
+    fn get_result_view_type(&self, cookie: isize) -> ComResult<(BString, u64)>;
 
     // retrieves display information for an item in the result pane.
     fn get_display_info(&self, ) -> ComResult<()>;

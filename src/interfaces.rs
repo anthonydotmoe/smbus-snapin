@@ -1,13 +1,18 @@
 use std::isize;
 
-use intercom::{prelude::*, IUnknown, BString, BStr};
+use intercom::{prelude::*, IUnknown};
 
 use windows::Win32::System::Com::{FORMATETC, STGMEDIUM};
-use windows::Win32::Foundation::COLORREF;
+use windows::Win32::Foundation::{COLORREF, LPARAM};
 use windows::Win32::UI::WindowsAndMessaging::HICON;
 use windows::Win32::Graphics::Gdi::HBITMAP;
+use windows::core::PCWSTR;
 
-use crate::mmc;
+
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternOutput)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct ComPCWSTR(pub PCWSTR);
 
 #[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternOutput)]
 #[allow(non_camel_case_types)]
@@ -34,9 +39,33 @@ pub struct ComFORMATETC(pub FORMATETC);
 #[repr(transparent)]
 pub struct ComSTGMEDIUM(pub STGMEDIUM);
 
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternInput, intercom::ExternOutput)]
+#[derive(Debug, Clone, Copy)]
+#[allow(non_camel_case_types)]
+#[repr(C)]
+pub struct SCOPEDATAITEM {
+    pub mask: u32,
+    pub display_name: PCWSTR,
+    pub image: i32,
+    pub open_image: i32,
+    pub state: u32,
+    pub children: i32,
+    pub lparam: LPARAM,
+    pub relative_id: HSCOPEITEM,
+    pub id: HSCOPEITEM,
+}
+
+// Should be correct
+pub const MMC_CALLBACK: PCWSTR = PCWSTR::from_raw(usize::MAX as *const u16);
+
+#[derive(Debug, Clone, Copy)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct HSCOPEITEM(pub isize);
+
 #[com_interface(com_iid = "0000010e-0000-0000-C000-000000000046")]
 pub trait IDataObject: IUnknown {
-    fn get_data(&self, ) -> ComResult<()>;
+    fn get_data(&self, pformatetc: *const ComFORMATETC) -> ComResult<*mut ComSTGMEDIUM>;
     fn get_data_here(&self, pformatetc: *const ComFORMATETC, pmedium: *mut ComSTGMEDIUM) -> ComResult<()>;
     fn query_get_data(&self, ) -> ComResult<()>;
     fn get_canonical_format(&self, ) -> ComResult<()>;
@@ -53,7 +82,7 @@ pub trait IComponentData: IUnknown {
     fn initialize(&mut self, lp_unknown: &ComItf<dyn IUnknown>) -> ComResult<()>;
 
     // Create a Component for this ComponentData
-    fn create_component(&self) -> ComResult<ComRc<dyn IComponent>>;
+    fn create_component(&mut self) -> ComResult<ComRc<dyn IComponent>>;
 
     // User actions
     fn notify(&self, lp_dataobject: &ComItf<dyn IDataObject>, event: u32, arg: i64, param: i64) -> ComResult<()>;
@@ -65,7 +94,7 @@ pub trait IComponentData: IUnknown {
     fn query_data_object(&mut self, cookie: isize, r#type: i32) -> ComResult<ComRc<dyn IDataObject>>;
 
     // Get display info for the name space item
-    fn get_display_info(&self, ) -> ComResult<()>;
+    fn get_display_info(&self, lpscopedataitem: *mut SCOPEDATAITEM) -> ComResult<()>;
 
     // The snap-in's compare function for two data objects
     fn compare_objects(&self, ) -> ComResult<()>;
@@ -74,7 +103,7 @@ pub trait IComponentData: IUnknown {
 #[com_interface(com_iid = "43136eb2-d36c-11cf-adbc-00aa00a80033")]
 pub trait IComponent: IUnknown {
     // provides an entry point to the console.
-    fn initialize(&self, lp_unknown: &ComItf<dyn IUnknown>) -> ComResult<()>;
+    fn initialize(&mut self, lp_console: &ComItf<dyn IConsole>) -> ComResult<()>;
 
     // notifies the snap-in of actions taken by the user.
     fn notify(&self, lp_dataobject: &ComItf<dyn IDataObject>, event: u32, arg: i64, param: i64) -> ComResult<()>;
@@ -87,7 +116,7 @@ pub trait IComponent: IUnknown {
     fn query_data_object(&mut self, cookie: isize, r#type: i32) -> ComResult<ComRc<dyn IDataObject>>;
  
     // determines what the result pane view should be.
-    fn get_result_view_type(&self, cookie: isize) -> ComResult<(BString, u64)>;
+    fn get_result_view_type(&self, cookie: isize) -> ComResult<(ComPCWSTR, u64)>;
 
     // retrieves display information for an item in the result pane.
     fn get_display_info(&self, ) -> ComResult<()>;
@@ -150,50 +179,67 @@ pub trait IConsole2: IConsole {
 #[com_interface(com_iid = "BEDEB620-F24D-11cf-8AFC-00AA003CA9F6")]
 pub trait IConsoleNamespace: IUnknown {
     // Allows the snap-in to insert a single item into the scope view.
-    fn insert_item(&self, ) -> ComResult<i32>;
+    fn insert_item(&self, lpscopedataitem: *mut SCOPEDATAITEM) -> ComResult<()>;
 
     // Allows the snap-in to delete a single item from the scope view.
-    fn delete_item(&self, ) -> ComResult<i32>;
+    fn delete_item(&self, ) -> ComResult<()>;
 
     // Allows the snap-in to set a single scope view item.
-    fn set_item(&self, ) -> ComResult<i32>;
+    fn set_item(&self, ) -> ComResult<()>;
 
     // Allows the snap-in to get a single scope view item.
-    fn get_item(&self, ) -> ComResult<i32>;
+    fn get_item(&self, ) -> ComResult<()>;
 
     // The handle of the child item if successful, otherwise NULL.
-    fn get_child_item(&self, ) -> ComResult<i32>;
+    fn get_child_item(&self, ) -> ComResult<()>;
 
     // The handle of the next item if successful, otherwise NULL.
-    fn get_next_item(&self, ) -> ComResult<i32>;
+    fn get_next_item(&self, ) -> ComResult<()>;
 
     // The handle of the parent item if successful, otherwise NULL.
-    fn get_parent_item(&self, ) -> ComResult<i32>;
+    fn get_parent_item(&self, ) -> ComResult<()>;
 }
 
 #[com_interface(com_iid = "255F18CC-65DB-11D1-A7DC-00C04FD8D565")]
 pub trait IConsoleNamespace2: IConsoleNamespace {
     // Allows the snap-in to expand an item in the console namespace.
-    fn expand(&self, ) -> ComResult<i32>;
+    fn expand(&self, ) -> ComResult<()>;
 
     // Add a dynamic extension to a selected node
-    fn add_extension(&self, ) -> ComResult<i32>;
+    fn add_extension(&self, ) -> ComResult<()>;
 }
 
+/// The functions that return strings--`get_snapin_description`, `get_provider`,
+/// and `get_snapin_version`--must allocate memory for out parameters using the
+/// COM API function `CoTaskMemAlloc`
 #[com_interface(com_iid = "1245208C-A151-11D0-A7D7-00C04FD909DD")]
 pub trait ISnapinAbout: IUnknown {
     // Text for the snap-in description box
-    fn get_snapin_description(&self) -> ComResult<BString>;
+    fn get_snapin_description(&self) -> ComResult<ComPCWSTR>;
     
     // Provider name
-    fn get_provider(&self) -> ComResult<BString>;
+    fn get_provider(&self) -> ComResult<ComPCWSTR>;
     
     // Version number for the snap-in
-    fn get_snapin_version(&self) -> ComResult<BString>;
+    fn get_snapin_version(&self) -> ComResult<ComPCWSTR>;
     
     // Main icon for about box
     fn get_snapin_image(&self) -> ComResult<ComHICON>;
     
     // Static folder images for scope and result panes
     fn get_static_folder_image(&self) -> ComResult<(ComHBITMAP, ComHBITMAP, ComHBITMAP, ComCOLORREF)>;
+}
+
+#[com_interface(com_iid = "72782D7A-A4A0-11D1-AF0F-00C04FB6DD2C")]
+pub trait IRequiredExtensions: IUnknown {
+    // Enable all extensions
+    fn enable_all_extensions(&self) -> ComResult<()>;
+    
+    // Get first required extension
+    // TODO: Implement ComCLSID fn get_first_extension(&self) -> ComResult<ComCLSID>
+    fn get_first_extension(&self) -> ComResult<()>;
+
+    // Get next required extension
+    // TODO: Implement ComCLSID fn get_first_extension(&self) -> ComResult<ComCLSID>
+    fn get_next_extension(&self) -> ComResult<()>;
 }

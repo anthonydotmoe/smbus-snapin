@@ -55,6 +55,23 @@ pub struct SCOPEDATAITEM {
     pub id: HSCOPEITEM,
 }
 
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternInput, intercom::ExternOutput)]
+#[derive(Debug, Clone, Copy)]
+#[allow(non_camel_case_types)]
+#[repr(C)]
+pub struct RESULTDATAITEM {
+    pub mask: u32,
+    pub scope_item: bool,
+    pub itemid: HRESULTITEM,
+    pub index: i32,
+    pub col: i32,
+    pub str: PCWSTR,
+    pub image: i32,
+    pub state: u32,
+    pub lparam: LPARAM,
+    pub indent: i32,
+}
+
 // Should be correct
 pub const MMC_CALLBACK: PCWSTR = PCWSTR::from_raw(usize::MAX as *const u16);
 
@@ -62,6 +79,12 @@ pub const MMC_CALLBACK: PCWSTR = PCWSTR::from_raw(usize::MAX as *const u16);
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
 pub struct HSCOPEITEM(pub isize);
+
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternInput)]
+#[derive(Debug, Clone, Copy)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct HRESULTITEM(pub isize);
 
 #[com_interface(com_iid = "0000010e-0000-0000-C000-000000000046")]
 pub trait IDataObject: IUnknown {
@@ -242,4 +265,69 @@ pub trait IRequiredExtensions: IUnknown {
     // Get next required extension
     // TODO: Implement ComCLSID fn get_first_extension(&self) -> ComResult<ComCLSID>
     fn get_next_extension(&self) -> ComResult<()>;
+}
+
+// The next step is to get IResultData working
+// https://learn.microsoft.com/en-us/previous-versions/windows/desktop/mmc/using-list-views-implementation-details
+#[com_interface(com_iid = "31DA5FA0-E0EB-11cf-9F21-00AA003CA9F6")]
+pub trait IResultData: IUnknown {
+    // Allows the snap-in to insert a single item.
+    fn insert_item(&self, resultdataitem: *mut RESULTDATAITEM) -> ComResult<()>;
+
+    // Allows the snap-in to delete a single item.
+    fn delete_item(&self, itemid: HRESULTITEM, _reserved: std::ffi::c_int) -> ComResult<()>;
+
+    // Allows the snap-in to find an item/subitem based on its user inserted lParam.
+    // HRESULT FindItemByLParam([in] LPARAM lParam, [out] HRESULTITEM *pItemID);
+    fn find_item_by_lparam(&self, ) -> ComResult<()>;
+
+    // Allows the snap-in to delete all the items.
+    // HRESULT DeleteAllRsltItems();
+    fn delete_all_rslt_items(&self, ) -> ComResult<()>;
+
+    // Allows the snap-in to set a single item.
+    // HRESULT SetItem([in] LPRESULTDATAITEM item);
+    fn set_item(&self, ) -> ComResult<()>;
+
+    // Allows the snap-in to get a single item.
+    // HRESULT GetItem([in,out] LPRESULTDATAITEM item);
+    fn get_item(&self, ) -> ComResult<()>;
+
+    // Returns the lParam of the first item, which matches the given state.
+    // HRESULT GetNextItem([in,out] LPRESULTDATAITEM item);
+    fn get_next_item(&self, ) -> ComResult<()>;
+
+    // Allows the snap-in to modify the state of an item.
+    // HRESULT ModifyItemState([in] int nIndex, [in] HRESULTITEM itemID,
+    //                      [in] UINT uAdd, [in] UINT uRemove);
+    fn modify_item_state(&self, ) -> ComResult<()>;
+
+    // Allows the snap-in to set the result view style.
+    // HRESULT ModifyViewStyle([in] MMC_RESULT_VIEW_STYLE add,
+    //                   [in] MMC_RESULT_VIEW_STYLE remove);
+    fn modify_view_style(&self, ) -> ComResult<()>;
+
+    // Allows the snap-in to set the result view mode.
+    // HRESULT SetViewMode([in] long lViewMode);
+    fn set_view_mode(&self, ) -> ComResult<()>;
+
+    // Allows the snap-in to get the result view mode.
+    // HRESULT GetViewMode([out] long* lViewMode);
+    fn get_view_mode(&self, ) -> ComResult<()>;
+
+    // Allows the snap-in to update a single item.
+    // HRESULT UpdateItem([in] HRESULTITEM itemID);
+    fn update_item(&self, ) -> ComResult<()>;
+
+    // Sort all items in result pane
+    // HRESULT Sort([in] int nColumn, [in] DWORD dwSortOptions, [in] LPARAM lUserParam);
+    fn sort(&self, ) -> ComResult<()>;
+
+    // Set the description bar text for the result view
+    // HRESULT SetDescBarText([in] LPOLESTR DescText);
+    fn set_desc_bar_text(&self, ) -> ComResult<()>;
+
+    // Set number of items in result pane list
+    // HRESULT SetItemCount([in] int nItemCount, [in] DWORD dwOptions);
+    fn set_item_count(&self, ) -> ComResult<()>;
 }

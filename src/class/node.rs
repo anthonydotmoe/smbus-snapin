@@ -186,6 +186,25 @@ impl IDataObject for Node {
                     }
                     
                 }
+                /*
+                 * Clipboard formats:
+                 *   - CCF_NODETYPE
+                 *   - CCF_SZNODETYPE
+                 *   - CCF_DISPLAY_NAME
+                 *   - CCF_SNAPIN_CLASSID
+                 *   - CCF_SNAPIN_CLASS
+                 *   - CCF_WINDOW_TITLE
+                 *   - CCF_MMC_MULTISELECT_DATAOBJECT
+                 *   - CCF_MULTI_SELECT_SNAPINS
+                 *   - CCF_OBJECT_TYPES_IN_MULTI_SELECT
+                 *   - CCF_MMC_DYNAMIC_EXTENSIONS
+                 *   - CCF_SNAPIN_PRELOADS
+                 *   - CCF_NODEID2
+                 *   - CCF_NODEID
+                 *   - CCF_COLUMN_SET_ID
+                 *   - CCF_DESCRIPTION
+                 *   - CCF_HTML_DETAILS
+                */
                 _ => {
                     log::error!("Can't handle this type of clipboard format. tymed: {:?} btw",
                         unsafe { (*pmedium).0.tymed }

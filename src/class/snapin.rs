@@ -48,6 +48,11 @@ impl IComponentData for MMCSnapIn {
         
         log::debug!("IComponentData::Initialize done");
         
+        // Make a node
+        let node = Node { node_type: NodeType::Folder, display_name: w!("This is a node") };
+        self.nodes.insert(1, ComBox::new(node));
+        self.next_cookie = 2;
+        
         Ok(())
     }
     
@@ -68,7 +73,7 @@ impl IComponentData for MMCSnapIn {
     
     fn notify(&self, _lp_dataobject: &ComItf<dyn IDataObject>, event:u32, arg:i64, param:i64) -> ComResult<()> {
         let mmc_event: MmcNotifyType = unsafe { std::mem::transmute(event) };
-        log::info!("Received event: {:#08X}", event);
+        log::info!("Received event: {:#06X}", event);
         return Ok(());
         if mmc_event == MmcNotifyType::Expand {
             log::info!("{} {}", param, if arg == 0 { "Collapsed" } else { "Expanded" });

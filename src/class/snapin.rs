@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use intercom::{ IUnknown, prelude::* };
 use windows::Win32::Foundation::LPARAM;
-use windows::w;
 
 use crate::class::node::NodeType;
 use crate::MMCSnapInComponent;
@@ -10,14 +9,55 @@ use crate::interfaces::*;
 use crate::Node;
 
 #[com_class(clsid = "d39d9c35-6106-4735-b944-7e929d607000", IComponentData)]
-#[derive(Default)]
+#[derive(Debug)]
 pub struct MMCSnapIn {
-    console: Option<ComRc<dyn IConsole>>,
+    console: Option<ComRc<dyn IConsole2>>,
     console_namespace: Option<ComRc<dyn IConsoleNamespace>>,
-    nodes: HashMap<isize, ComBox<Node>>,
-    components: Vec<ComBox<MMCSnapInComponent>>,
+    pub nodes: HashMap<isize, ComBox<Node>>,
+    //_components: Vec<ComBox<MMCSnapInComponent>>,
     //nodes: HashMap<isize, ComRc<dyn IDataObject>>,
     next_cookie: isize,
+}
+
+// Impl'd because default Default implementation makes next_cookie = 0.
+impl Default for MMCSnapIn {
+    fn default() -> Self {
+        MMCSnapIn {
+            console: None,
+            console_namespace: None,
+            nodes: HashMap::<isize, ComBox<Node>>::default(),
+            //_components: Vec::new(),
+            next_cookie: 1,
+        }
+    }
+}
+
+impl MMCSnapIn {
+    fn add_node(&mut self, name: &str) {
+        let new_node = Node::new(
+            self as *const _,
+            name.to_owned(),
+            NodeType::Folder,
+        );
+        
+        self.nodes.insert(self.next_cookie, ComBox::new(new_node));
+        
+        self.next_cookie += 1;
+    }
+    
+    fn add_root_node(&mut self) {
+        match self.nodes.get(&0) {
+            Some(_) => return,
+            None => {
+                let root_node = Node::new(
+                    self as *const _,
+                    "SMBus Snap-in".to_owned(),
+                    NodeType::Root,
+                );
+                self.nodes.insert(0, ComBox::new(root_node));
+            }
+        }
+    }
 }
 
 impl IComponentData for MMCSnapIn {
@@ -27,7 +67,7 @@ impl IComponentData for MMCSnapIn {
         // Use the received IUnknown interface to query for IConsole2 and
         // IConsoleNamespace2
 
-        let console: ComResult<ComRc<dyn IConsole>>  = ComItf::query_interface(lp_unknown);
+        let console: ComResult<ComRc<dyn IConsole2>>  = ComItf::query_interface(lp_unknown);
         let console_namespace: ComResult<ComRc<dyn IConsoleNamespace>>  = ComItf::query_interface(lp_unknown);
         
         match console {
@@ -48,10 +88,10 @@ impl IComponentData for MMCSnapIn {
         
         log::debug!("IComponentData::Initialize done");
         
-        // Make a node
-        let node = Node { node_type: NodeType::Folder, display_name: w!("This is a node") };
-        self.nodes.insert(1, ComBox::new(node));
-        self.next_cookie = 2;
+        // Make a few nodes
+        self.add_node("Node 1");
+        self.add_node("Node 2");
+        self.add_node("Node 3");
         
         Ok(())
     }
@@ -60,7 +100,7 @@ impl IComponentData for MMCSnapIn {
         //Err(ComError::E_NOTIMPL)
 
         
-        let component = MMCSnapInComponent::default();
+        let component = MMCSnapInComponent::new(self as *mut _);
         Ok(ComRc::from(ComBox::new(component)))
         // or 
         /*
@@ -71,52 +111,54 @@ impl IComponentData for MMCSnapIn {
 
     }
     
-    fn notify(&self, _lp_dataobject: &ComItf<dyn IDataObject>, event:u32, arg:i64, param:i64) -> ComResult<()> {
+    fn notify(&mut self, _lp_dataobject: &ComItf<dyn IDataObject>, event:u32, arg:i64, param:i64) -> ComResult<()> {
         let mmc_event: MmcNotifyType = unsafe { std::mem::transmute(event) };
         log::info!("Received event: {:#06X}", event);
-        return Ok(());
+        
+        // Try adding the node to the scope pane
         if mmc_event == MmcNotifyType::Expand {
             log::info!("{} {}", param, if arg == 0 { "Collapsed" } else { "Expanded" });
-            
-            
             match &self.console_namespace {
-                // Create the root node in the scope pane with the following attributes:
-                // SDI_STR | SDI_PARAM | SDI_CHILDREN | SDI_FIRST:
-                //   - display_name field is filled with MMC_CALLBACK (meaning the MMC will call
-                //     IComponentData::GetDisplayInfo() to get the display name)
-                //   - param is filled with the cookie that the node will be identified with
-                //   - children is set to zero (The snap-in does not have any child items to add under the inserted item)
-                //   - The inserted scope item will be the first child of the referenced `relative_id` (in this case the
-                //     domain object)
                 Some(consolens) => {
-                    let mut scopedataitem = SCOPEDATAITEM {
-                        mask: 0x00002 | 0x00020 | 0x00040 | 0x08000000, // SDI_STR | SDI_PARAM | SDI_CHILDREN | SDI_FIRST
-                        display_name: crate::interfaces::MMC_CALLBACK,
-                        image: 0,
-                        open_image: 0,
-                        state: 0,
-                        children: 0,
-                        //lparam: LPARAM(isize::MAX),
-                        lparam: LPARAM(0),
-                        relative_id: HSCOPEITEM(param as isize),
-                        id: HSCOPEITEM(0),
-                    };
-                
-                    
-                    match consolens.insert_item((&mut scopedataitem) as *mut _) {
-                        Ok(_) => {
-                            log::info!("Wow, inserting the item worked?\n{:?}", scopedataitem)
-                            // self.nodes.insert(scopedataitem.id.0, v)
+                    for (cookie, node) in self.nodes.iter_mut() {
+                        
+                        if node.node_type == NodeType::Root {
+                            continue;
                         }
-                        Err(e) => {
-                            log::error!("IConsoleNamespace::InsertItem() error: {}", e)
+
+                        if node.hscopeitem.0 == 0 {
+
+                            let mut scopedataitem = SCOPEDATAITEM {
+                                mask: 0x00002 | 0x00020 | 0x00040, // SDI_STR | SDI_PARAM | SDI_CHILDREN
+                                display_name: crate::interfaces::MMC_CALLBACK,
+                                image: 0,
+                                open_image: 0,
+                                state: 0,
+                                children: 0,
+                                // Cookie is 1 for the node
+                                lparam: LPARAM(cookie.clone()),
+                                relative_id: HSCOPEITEM(param as isize),
+                                id: HSCOPEITEM(0),
+                            };
+            
+                    
+                            match consolens.insert_item((&mut scopedataitem) as *mut _) {
+                                Ok(_) => {
+                                    log::info!("Wow, inserting the item worked?\n{:?}", scopedataitem);
+                            
+                                    // Store the id back in the Node struct
+                                    node.hscopeitem = scopedataitem.id;
+        
+                                }
+                                Err(e) => {
+                                    log::error!("IConsoleNamespace::InsertItem() error: {}", e)
+                                }
+                            }
                         }
                     }
                 }
                 None => {}
             }
-        
-
         }
         Ok(())
     }
@@ -138,9 +180,9 @@ impl IComponentData for MMCSnapIn {
                         log::debug!("No root node has been made yet.");
                         
                         // Create the root node
-                        let root_node = Node { node_type: NodeType::Root, display_name: w!("SMBus Snap-in") };
-                        self.nodes.insert(0, ComBox::new(root_node));
-                        self.next_cookie = 1;
+                        self.add_root_node();
+
+                        log::debug!("Back from add_root_node, about to return nodes.get");
                         return Ok(ComRc::from(self.nodes.get(&cookie).unwrap()));
                     }
                     Some(root_node) => {
@@ -157,6 +199,7 @@ impl IComponentData for MMCSnapIn {
                         return Ok(ComRc::from(node));
                     }
                     None => {
+                        log::error!("Tried to get node with cookie: {}", &cookie);
                         return Err(ComError::E_POINTER);
                     }
                 }
@@ -164,25 +207,37 @@ impl IComponentData for MMCSnapIn {
         }
     }
     
-    fn get_display_info(&self,lpscopedataitem: *mut SCOPEDATAITEM) -> ComResult<()> {
+    fn get_display_info(&mut self,lpscopedataitem: *mut SCOPEDATAITEM) -> ComResult<()> {
         log::debug!("Got {:?}", unsafe { *lpscopedataitem });
-        
         let cookie = &(unsafe {*lpscopedataitem}.lparam.0);
-        let nameptr = self.nodes.get(cookie);
+        let nameptr = self.nodes.get_mut(cookie);
         
         match nameptr {
-            None => Err(ComError::E_POINTER),
+            None => {
+                log::error!("Couldn't match cookie: {}", &cookie);
+                return Err(ComError::E_POINTER);
+            }
             Some(obj) => {
-                // Change the name of the node?
-                unsafe {
-                    (*lpscopedataitem).display_name = obj.display_name;
+                let mask = unsafe { (*lpscopedataitem).mask.clone() };
+                if (mask & 0x0002) != 0 {  // It wants the display string
+                    match obj.pcwstr() {
+                        Ok(pcwstr) => {
+                            unsafe {
+                                (*lpscopedataitem).display_name.0 = pcwstr.0.0;
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Error setting string");
+                            return Err(e);
+                        }
+                    }
                 }
                 Ok(())
             }
         }
     }
-    
-    fn compare_objects(&self,) -> ComResult<()> {
+
+    fn compare_objects(&self, _obj_a: &ComItf<dyn IDataObject>, _obj_b: &ComItf<dyn IDataObject>) -> ComResult<()> {
         log::error!("Not implemented");
         Ok(())
     }

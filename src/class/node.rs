@@ -1,8 +1,10 @@
 use guid::GUID;
 use intercom::{prelude::*, raw::HRESULT};
-use windows::{Win32::{System::{Memory::{ GlobalUnlock, GlobalLock, GlobalSize }, DataExchange::GetClipboardFormatNameW, Com::TYMED_HGLOBAL}, Foundation::{MAX_PATH, GetLastError, NO_ERROR}}, core::PCWSTR, w};
+use windows::{Win32::{System::{Memory::{ GlobalUnlock, GlobalLock, GlobalSize }, DataExchange::GetClipboardFormatNameW, Com::{TYMED_HGLOBAL, CoTaskMemFree, CoTaskMemAlloc}}, Foundation::{MAX_PATH, GetLastError, NO_ERROR}}, core::PCWSTR};
 
-use crate::{interfaces::{IDataObject, ComFORMATETC, ComSTGMEDIUM}, class::snapin::CLSID_MMCSnapIn};
+use crate::{interfaces::{IDataObject, ComFORMATETC, ComSTGMEDIUM, HSCOPEITEM, ComPCWSTR}, class::snapin::CLSID_MMCSnapIn};
+
+use super::MMCSnapIn;
 
 pub const DV_E_FORMATETC: ComError = ComError{
     hresult: HRESULT { hr: windows::Win32::Foundation::DV_E_FORMATETC.0 },
@@ -14,7 +16,7 @@ pub const DV_E_TYMED: ComError = ComError{
     error_info: None,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub enum NodeType {
     #[default]
     Folder,
@@ -24,29 +26,78 @@ pub enum NodeType {
 #[com_class(IDataObject)]
 #[derive(Debug)]
 pub struct Node {
+    _owner: *const MMCSnapIn,
     pub node_type: NodeType,
-    pub display_name: PCWSTR,
+    pcwstr_name: Option<PCWSTR>,
+    pub display_name: String,
+    pub hscopeitem: HSCOPEITEM,
 }
 
 impl Default for Node {
     fn default() -> Self {
         Node {
+            _owner: std::ptr::null(),
             node_type: NodeType::Folder,
-            display_name: w!("Default Node")
+            display_name: String::new(),
+            pcwstr_name: None,
+            hscopeitem: HSCOPEITEM(0),
         }
     }
 }
 
-/*
 impl Node {
-    pub fn new() -> Self {
+    pub fn new(owner: *const MMCSnapIn, name: String, ntype: NodeType) -> Self {
         Node {
-            node_type: NodeType::Root,
-            display_name: w!("Default GPFolders::Node Name"),
+            _owner: owner,
+            display_name: name,
+            node_type: ntype,
+            pcwstr_name: None,
+            hscopeitem: HSCOPEITEM(0),
+        }
+    }
+    
+    // Calls to this function release the pointer to the PCWSTR and allocate a new one.
+    pub fn pcwstr(&mut self) -> ComResult<ComPCWSTR> {
+        if self.pcwstr_name.is_some() {
+            unsafe { CoTaskMemFree(Some(self.pcwstr_name.unwrap().0 as *const _)); }
+        }
+        
+        log::debug!("Converting string \"{}\" to PCWSTR", self.display_name);
+        
+        let str: Vec<u16> = self.display_name
+            .to_owned()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        
+        let size = str.len() * std::mem::size_of::<u16>();
+        let olestrbuf = unsafe { CoTaskMemAlloc(size) };
+        
+        if olestrbuf.is_null() {
+            log::error!("CoTaskMemAlloc returns null pointer");
+            return Err(ComError::E_FAIL);
+        }
+        
+        unsafe {
+            std::ptr::copy_nonoverlapping(str.as_ptr(), olestrbuf as *mut u16, str.len());
+        }
+        
+        self.pcwstr_name = Some(PCWSTR::from_raw(olestrbuf as *const u16));
+        
+        Ok(ComPCWSTR(PCWSTR::from_raw(olestrbuf as *const u16)))
+    }
+}
+
+impl Drop for Node {
+    fn drop(&mut self) {
+        match self.pcwstr_name {
+            Some(str) => unsafe {
+                CoTaskMemFree(Some(str.0 as *const _));
+            },
+            None => {}
         }
     }
 }
-*/
 
 impl IDataObject for Node {
     fn get_data(&self, _pformatetc: *const ComFORMATETC) -> ComResult<*mut ComSTGMEDIUM> {
@@ -78,8 +129,7 @@ impl IDataObject for Node {
                                     return Err(ComError::E_FAIL);
                                 }
                                 
-                                let mut node_name_utf16: Vec<u16> = self.display_name.as_wide().to_vec();
-                                node_name_utf16.push(0);
+                                let node_name_utf16: Vec<u16> = self.display_name.encode_utf16().chain(std::iter::once::<u16>(0)).collect();
                                 
                                 let node_name_utf16_size = node_name_utf16.len() * std::mem::size_of::<u16>();
                                 
@@ -129,7 +179,6 @@ impl IDataObject for Node {
                                         }
                                     }
                                     _ => {
-                                        log::debug!("Unlocking HGLOBAL seemed to work");
                                     }
 
                                 }

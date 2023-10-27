@@ -3,13 +3,13 @@ use std::isize;
 use intercom::{prelude::*, IUnknown};
 
 use windows::Win32::System::Com::{FORMATETC, STGMEDIUM};
-use windows::Win32::Foundation::{COLORREF, LPARAM};
+use windows::Win32::Foundation::{COLORREF, LPARAM, HWND};
 use windows::Win32::UI::WindowsAndMessaging::HICON;
 use windows::Win32::Graphics::Gdi::HBITMAP;
 use windows::core::PCWSTR;
 
 
-#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternOutput)]
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternInput, intercom::ExternOutput)]
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
 pub struct ComPCWSTR(pub PCWSTR);
@@ -28,6 +28,11 @@ pub struct ComCOLORREF(pub COLORREF);
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
 pub struct ComHICON(pub HICON);
+
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternOutput)]
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+pub struct ComHWND(pub HWND);
 
 #[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternInput)]
 #[allow(non_camel_case_types)]
@@ -75,12 +80,14 @@ pub struct RESULTDATAITEM {
 // Should be correct
 pub const MMC_CALLBACK: PCWSTR = PCWSTR::from_raw(usize::MAX as *const u16);
 
+
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternInput, intercom::ExternOutput)]
 #[derive(Debug, Clone, Copy)]
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
 pub struct HSCOPEITEM(pub isize);
 
-#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternInput)]
+#[derive(intercom::ExternType, intercom::ForeignType, intercom::ExternInput, intercom::ExternOutput)]
 #[derive(Debug, Clone, Copy)]
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
@@ -108,7 +115,7 @@ pub trait IComponentData: IUnknown {
     fn create_component(&mut self) -> ComResult<ComRc<dyn IComponent>>;
 
     // User actions
-    fn notify(&self, lp_dataobject: &ComItf<dyn IDataObject>, event: u32, arg: i64, param: i64) -> ComResult<()>;
+    fn notify(&mut self, lp_dataobject: &ComItf<dyn IDataObject>, event: u32, arg: i64, param: i64) -> ComResult<()>;
 
     // Release cookies associated with the children of a specific node
     fn destroy(&self) -> ComResult<()>;
@@ -117,10 +124,10 @@ pub trait IComponentData: IUnknown {
     fn query_data_object(&mut self, cookie: isize, r#type: i32) -> ComResult<ComRc<dyn IDataObject>>;
 
     // Get display info for the name space item
-    fn get_display_info(&self, lpscopedataitem: *mut SCOPEDATAITEM) -> ComResult<()>;
+    fn get_display_info(&mut self, lpscopedataitem: *mut SCOPEDATAITEM) -> ComResult<()>;
 
     // The snap-in's compare function for two data objects
-    fn compare_objects(&self, ) -> ComResult<()>;
+    fn compare_objects(&self, obj_a: &ComItf<dyn IDataObject>, obj_b: &ComItf<dyn IDataObject>) -> ComResult<()>;
 }
 
 #[com_interface(com_iid = "43136eb2-d36c-11cf-adbc-00aa00a80033")]
@@ -142,12 +149,12 @@ pub trait IComponent: IUnknown {
     fn get_result_view_type(&self, cookie: isize) -> ComResult<(ComPCWSTR, u64)>;
 
     // retrieves display information for an item in the result pane.
-    fn get_display_info(&self, ) -> ComResult<()>;
+    fn get_display_info(&mut self, resultdataitem: *mut RESULTDATAITEM) -> ComResult<()>;
 
     // enables a snap-in to compare two data objects acquired through
     // IComponent::QueryDataObject. Be aware that data objects can be acquired
     // from two different instances of IComponent.
-    fn compare_objects(&self, ) -> ComResult<()>;
+    fn compare_objects(&self, obj_a: &ComItf<dyn IDataObject>, obj_b: &ComItf<dyn IDataObject>) -> ComResult<()>;
 }
 
 #[com_interface(com_iid = "43136EB1-D36C-11CF-ADBC-00AA00A80033")]
@@ -171,7 +178,7 @@ pub trait IConsole: IUnknown {
     fn update_all_views(&self, ) -> ComResult<i32>;
 
     // Displays a message box
-    fn message_box(&self, ) -> ComResult<i32>;
+    fn message_box(&self, text: ComPCWSTR, title: ComPCWSTR, style: u32) -> ComResult<i32>;
 
     // Query for the IConsoleVerb.
     fn query_console_verb(&self, ) -> ComResult<i32>;
@@ -180,7 +187,7 @@ pub trait IConsole: IUnknown {
     fn select_scope_item(&self, ) -> ComResult<i32>;
 
     // Returns handle to the main frame window.
-    fn get_main_window(&self, ) -> ComResult<i32>;
+    fn get_main_window(&self) -> ComResult<ComHWND>;
 
     //Create a new window rooted at the scope item specified by hScopeItem.
     fn new_window(&self, ) -> ComResult<i32>;
@@ -190,13 +197,13 @@ pub trait IConsole: IUnknown {
 pub trait IConsole2: IConsole {
     // Allows the snap-in to expand/collapse a scope item in the corresponding
     // view. Should be called only by the IConsole associated with a IComponent.
-    fn expand(&self, ) -> ComResult<i32>;
+    fn expand(&self, item: HSCOPEITEM, expand: bool) -> ComResult<()>;
 
     // Determines if the user prefers taskpad views by default.
-    fn is_taskpad_view_preferred(&self, ) -> ComResult<i32>;
+    fn is_taskpad_view_preferred(&self) -> ComResult<()>;
 
     // Allows the snap-in to change the text on the status bar.
-    fn set_status_text(&self, ) -> ComResult<i32>;
+    fn set_status_text(&self, status_text: ComPCWSTR) -> ComResult<()>;
 }
 
 #[com_interface(com_iid = "BEDEB620-F24D-11cf-8AFC-00AA003CA9F6")]
@@ -204,23 +211,44 @@ pub trait IConsoleNamespace: IUnknown {
     // Allows the snap-in to insert a single item into the scope view.
     fn insert_item(&self, lpscopedataitem: *mut SCOPEDATAITEM) -> ComResult<()>;
 
-    // Allows the snap-in to delete a single item from the scope view.
-    fn delete_item(&self, ) -> ComResult<()>;
+    /// Allows the snap-in to delete a single item from the scope view.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `item` - A handle to the item whose child items are to be deleted from
+    /// the scope pane. If the second argument is set to **TRUE**, the item is
+    /// also deleted.
+    /// 
+    /// * `delete_this` - If **TRUE**, the item specified by `item` is also
+    /// deleted; otherwise, it is not.
+    fn delete_item(&self, item: HSCOPEITEM, delete_this: std::ffi::c_long) -> ComResult<()>;
 
-    // Allows the snap-in to set a single scope view item.
-    fn set_item(&self, ) -> ComResult<()>;
+    /// Allows the snap-in to set a single scope view item.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `item` - A pointer to a SCOPEDATAITEM structure that contains
+    /// information about the item to be set in the scope pane.
+    fn set_item(&self, item: *mut SCOPEDATAITEM) -> ComResult<()>;
 
-    // Allows the snap-in to get a single scope view item.
-    fn get_item(&self, ) -> ComResult<()>;
+    /// Allows the snap-in to get a single scope view item.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `item` - A pointer to a SCOPEDATAITEM structure that specifies the
+    /// information to retrieve and receives information about the item. When
+    /// the message is sent, the ID member of the structure identified the item
+    /// and the mask member specified the attributes to receive.
+    fn get_item(&self, item: *mut SCOPEDATAITEM) -> ComResult<()>;
 
-    // The handle of the child item if successful, otherwise NULL.
-    fn get_child_item(&self, ) -> ComResult<()>;
+    /// The handle of the child item if successful, otherwise NULL.
+    fn get_child_item(&self, item: HSCOPEITEM) -> ComResult<(HSCOPEITEM, isize)>;
 
     // The handle of the next item if successful, otherwise NULL.
-    fn get_next_item(&self, ) -> ComResult<()>;
+    fn get_next_item(&self, item: HSCOPEITEM) -> ComResult<(HSCOPEITEM, isize)>;
 
     // The handle of the parent item if successful, otherwise NULL.
-    fn get_parent_item(&self, ) -> ComResult<()>;
+    fn get_parent_item(&self, item: HSCOPEITEM) -> ComResult<(HSCOPEITEM, isize)>;
 }
 
 #[com_interface(com_iid = "255F18CC-65DB-11D1-A7DC-00C04FD8D565")]

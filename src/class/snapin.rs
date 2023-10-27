@@ -113,7 +113,7 @@ impl IComponentData for MMCSnapIn {
     
     fn notify(&mut self, _lp_dataobject: &ComItf<dyn IDataObject>, event:u32, arg:i64, param:i64) -> ComResult<()> {
         let mmc_event: MmcNotifyType = unsafe { std::mem::transmute(event) };
-        log::info!("Received event: {:#06X}", event);
+        log::info!("Received event: {:#06X} ({:?})", event, mmc_event);
         
         // Try adding the node to the scope pane
         if mmc_event == MmcNotifyType::Expand {
@@ -135,20 +135,15 @@ impl IComponentData for MMCSnapIn {
                                 open_image: 0,
                                 state: 0,
                                 children: 0,
-                                // Cookie is 1 for the node
                                 lparam: LPARAM(cookie.clone()),
                                 relative_id: HSCOPEITEM(param as isize),
                                 id: HSCOPEITEM(0),
                             };
             
-                    
                             match consolens.insert_item((&mut scopedataitem) as *mut _) {
                                 Ok(_) => {
-                                    log::info!("Wow, inserting the item worked?\n{:?}", scopedataitem);
-                            
                                     // Store the id back in the Node struct
                                     node.hscopeitem = scopedataitem.id;
-        
                                 }
                                 Err(e) => {
                                     log::error!("IConsoleNamespace::InsertItem() error: {}", e)
@@ -181,8 +176,6 @@ impl IComponentData for MMCSnapIn {
                         
                         // Create the root node
                         self.add_root_node();
-
-                        log::debug!("Back from add_root_node, about to return nodes.get");
                         return Ok(ComRc::from(self.nodes.get(&cookie).unwrap()));
                     }
                     Some(root_node) => {
@@ -199,7 +192,7 @@ impl IComponentData for MMCSnapIn {
                         return Ok(ComRc::from(node));
                     }
                     None => {
-                        log::error!("Tried to get node with cookie: {}", &cookie);
+                        log::error!("MMC tried to get node with cookie: {}", &cookie);
                         return Err(ComError::E_POINTER);
                     }
                 }

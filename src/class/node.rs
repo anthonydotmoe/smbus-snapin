@@ -1,6 +1,6 @@
 use guid::GUID;
 use intercom::{prelude::*, raw::HRESULT};
-use windows::{Win32::{System::{Memory::{ GlobalUnlock, GlobalLock, GlobalSize }, DataExchange::GetClipboardFormatNameW, Com::{TYMED_HGLOBAL, CoTaskMemFree, CoTaskMemAlloc}}, Foundation::{MAX_PATH, GetLastError, NO_ERROR}}, core::PCWSTR};
+use windows::{Win32::{System::{Memory::{ GlobalUnlock, GlobalLock, GlobalSize }, DataExchange::GetClipboardFormatNameW, Com::{ CoTaskMemFree, CoTaskMemAlloc }}, Foundation::{MAX_PATH, GetLastError, NO_ERROR}}, core::PCWSTR};
 
 use crate::{interfaces::{IDataObject, ComFORMATETC, ComSTGMEDIUM, HSCOPEITEM, ComPCWSTR}, class::snapin::CLSID_MMCSnapIn};
 
@@ -107,6 +107,8 @@ impl IDataObject for Node {
     fn get_data_here(&self, pformatetc: *const ComFORMATETC, pmedium: *mut ComSTGMEDIUM) -> ComResult<()> {
         let clipformat: u32 = unsafe { (*pformatetc).0.cfFormat.into() };
         log::debug!("Got Clipformat: {}", clipformat);
+
+        let tymed: TagTYMED = unsafe { std::mem::transmute((*pmedium).0.tymed.0) };
         
         let mut clipformat_name: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
         
@@ -120,8 +122,8 @@ impl IDataObject for Node {
                 "CCF_DISPLAY_NAME" => {
                     // Return node display name as WSTR
                     unsafe {
-                        match (*pmedium).0.tymed {
-                            TYMED_HGLOBAL => {
+                        match tymed {
+                            TagTYMED::HGlobal => {
                                 let ptr = GlobalLock((*pmedium).0.Anonymous.hGlobal);
                                 
                                 if ptr.is_null() {
@@ -144,7 +146,7 @@ impl IDataObject for Node {
                                 
                             }
                             _ => {
-                                log::error!("Unsupported TYMED: {:?}", (*pmedium).0.tymed);
+                                log::error!("Unsupported TYMED: {:?}", tymed);
                                 return Err(DV_E_TYMED);
                             }
                         }
@@ -153,8 +155,8 @@ impl IDataObject for Node {
                 "CCF_NODETYPE" => {
                     // Return the GUID of the node type
                     unsafe {
-                        match (*pmedium).0.tymed {
-                            TYMED_HGLOBAL => {
+                        match tymed {
+                            TagTYMED::HGlobal => {
                                 let ptr = GlobalLock((*pmedium).0.Anonymous.hGlobal);
                                 
                                 if ptr.is_null() {
@@ -178,13 +180,11 @@ impl IDataObject for Node {
                                             return Err(ComError::E_FAIL);
                                         }
                                     }
-                                    _ => {
-                                    }
-
+                                    _ => {}
                                 }
                             }
                             _ => {
-                                log::error!("Unsupported TYMED: {:?}", (*pmedium).0.tymed);
+                                log::error!("Unsupported TYMED: {:?}", tymed);
                                 return Err(DV_E_TYMED);
                                 
                             }
@@ -194,8 +194,8 @@ impl IDataObject for Node {
                 "CCF_SNAPIN_CLSID" => {
                     // Return the CLSID of the snap in
                     unsafe {
-                        match (*pmedium).0.tymed {
-                            TYMED_HGLOBAL => {
+                        match tymed {
+                            TagTYMED::HGlobal => {
                                 let ptr = GlobalLock((*pmedium).0.Anonymous.hGlobal);
                                 
                                 if ptr.is_null() {
@@ -203,13 +203,7 @@ impl IDataObject for Node {
                                     return Err(ComError::E_FAIL);
                                 }
                                 
-                                let hglobal_size = GlobalSize((*pmedium).0.Anonymous.hGlobal);
-                                log::debug!("HGLOBAL is {} bytes", hglobal_size);
-                                log::debug!("Writing {:?} to HGLOBAL", &CLSID_MMCSnapIn);
-                                
                                 let guid_size_in_bytes = std::mem::size_of::<GUID>();
-                                
-
                                 std::ptr::copy_nonoverlapping(&CLSID_MMCSnapIn as *const _ as *const u8, ptr as *mut u8, guid_size_in_bytes);
 
                                 match GlobalUnlock((*pmedium).0.Anonymous.hGlobal).0 {
@@ -220,14 +214,11 @@ impl IDataObject for Node {
                                             return Err(ComError::E_FAIL);
                                         }
                                     }
-                                    _ => {
-                                        log::debug!("Unlocking HGLOBAL seemed to work");
-                                    }
-                                        
+                                    _ => {}
                                 }
                             }
                             _ => {
-                                log::error!("Unsupported TYMED: {:?}", (*pmedium).0.tymed);
+                                log::error!("Unsupported TYMED: {:?}", tymed);
                                 return Err(DV_E_TYMED);
                                 
                             }
@@ -255,9 +246,7 @@ impl IDataObject for Node {
                  *   - CCF_HTML_DETAILS
                 */
                 _ => {
-                    log::error!("Can't handle this type of clipboard format. tymed: {:?} btw",
-                        unsafe { (*pmedium).0.tymed }
-                    );
+                    log::error!("Can't handle this type of clipboard format. tymed: {:?} btw", tymed);
                     return Err(DV_E_FORMATETC);
                 }
             }
@@ -296,4 +285,18 @@ impl IDataObject for Node {
     fn enum_d_advise(&self) -> ComResult<()> {
         Ok(())
     }
+}
+
+#[repr(i32)]
+#[derive(Debug)]
+#[allow(dead_code)]
+pub enum TagTYMED {
+    HGlobal     = 1,
+    File        = 2,
+    IStream     = 4,
+    IStorage    = 8,
+    Gdi         = 16,
+    Metafile    = 32,
+    EnhMetafile = 64,
+    Null        = 0,
 }

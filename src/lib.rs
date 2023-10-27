@@ -19,7 +19,7 @@ fn on_load() {
     use log::LevelFilter;
     simple_logging::log_to_file(
         &format!("{}\\debug.log", env!("CARGO_MANIFEST_DIR")),
-        LevelFilter::Trace,
+        LevelFilter::Debug,
     )
     .unwrap();
 }

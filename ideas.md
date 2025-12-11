@@ -388,3 +388,326 @@ That alone will make the codebase feel *way* more friendly, and sets you up nice
 * Adding actual SMBus enumeration without drowning in COM boilerplate.
 
 From there, you can decide how far you want to push the abstraction (full traits and helper types) versus “just enough to stop losing time to pointer bugs,” but your instincts about “good types so business logic can ignore byte twiddling” are exactly right.
+
+> [!NOTE]
+> I then brought in the issue of actions and Property Sheet pages
+
+Yeah, you’re basically describing the natural “next layer up”:
+
+* nodes stop caring about HGLOBAL, TYMED, cfFormats, etc.
+* the MMC layer becomes “just another UI front-end” that renders:
+
+  * **Nodes**
+  * **Actions**
+  * **Property pages**
+
+Let me walk through how I’d structure that *today* so it scales to actions + property sheets without you getting destroyed by lifetimes or fat pointers again.
+
+---
+
+## 1. Core idea: Node + Actions + Pages as domain concepts
+
+At the domain / snap-in layer, pretend MMC doesn’t exist.
+
+You’d have something like:
+
+```rust
+/// Logical thing that appears in the tree / result view
+pub struct NodeModel {
+    pub id: NodeId,          // your cookie
+    pub label: NodeLabel,    // we talked about this earlier
+    pub kind: NodeKind,      // Root / Controller / Device / Sensor / Folder / ...
+}
+
+pub enum NodeKind {
+    Root,
+    Controller(SmbusControllerId),
+    Device(SmbusDeviceId),
+    Sensor(SensorId),
+}
+
+/// “What can I do with this node when the user right-clicks?”
+pub struct NodeAction {
+    pub id: ActionId,
+    pub label: String,
+    pub style: ActionStyle,  // normal / default / separator, etc.
+    pub scope: ActionScope,  // scope / result / both
+}
+
+pub enum ActionStyle { Normal, Default, Separator }
+pub enum ActionScope { Scope, Result, Both }
+
+/// “What property pages does this node expose in its Properties dialog?”
+pub struct NodePropertyPage {
+    pub id: PageId,
+    pub title: String,
+    // You can store a callback or some kind of descriptor here:
+    pub kind: PageKind,
+}
+
+pub enum PageKind {
+    BasicInfo,
+    AdvancedSettings,
+    // whatever makes sense
+}
+```
+
+Then define a trait that your domain implements:
+
+```rust
+pub trait NodeBehavior {
+    /// context menu entries
+    fn actions(&self) -> Vec<NodeAction>;
+
+    /// property sheet pages
+    fn property_pages(&self) -> Vec<NodePropertyPage>;
+
+    /// actually execute an action
+    fn invoke_action(&mut self, action_id: ActionId) -> Result<(), ActionError>;
+
+    /// (optionally) load/save for property pages
+    fn load_page(&self, page_id: PageId, sink: &mut dyn PageDataSink);
+    fn save_page(&mut self, page_id: PageId, source: &dyn PageDataSource)
+        -> Result<(), PageValidationError>;
+}
+```
+
+**Important:** this trait has *no MMC types in it*. It’s all your model.
+
+Your `NodeRegistry` can then give you:
+
+```rust
+impl NodeRegistry {
+    pub fn get_behavior(&mut self, id: NodeId) -> &mut dyn NodeBehavior { ... }
+}
+```
+
+Backed by enums or boxed trait objects internally.
+
+---
+
+## 2. MMC layer: “adapter” over NodeBehavior
+
+Now the MMC layer just adapts that trait to the gross COM interfaces.
+
+### IDataObject
+
+You already wired this; now just use your `NodeLabel` + `NodeId`:
+
+* `CCF_DISPLAY_NAME` → `node.label.as_pcwstr()`
+* `CCF_NODETYPE`, `CCF_SNAPIN_CLSID` → GUID helper
+* same pattern as before, but all the logic is centralized
+
+```rust
+impl IDataObject for NodeDataObject {
+    fn get_data_here(&self, pformatetc: *const ComFORMATETC,
+                     pmedium: *mut ComSTGMEDIUM) -> ComResult<()> {
+
+        let cf = ClipboardFormat::from_formatetc(pformatetc)?;
+        let tymed = TagTYMED::try_from(unsafe { (*pmedium).0.tymed.0 })?;
+
+        let snapin = unsafe { &*self.snapin };
+        let node = snapin.registry.get(self.id)
+            .ok_or(ComError::E_POINTER)?;
+
+        // now delegate to some utility that knows how to fill these formats
+        MmcDataObjectFormatter::for_node(node)
+            .get_data_here(cf, tymed, unsafe { &mut (*pmedium).0 })
+    }
+}
+```
+
+The node implementation no longer sees `HGLOBAL`, `TYMED`, etc.
+
+---
+
+## 3. Context menu: actions → IExtendContextMenu
+
+You already have the right mental model:
+
+> actions at high level; MMC layer enumerates them via IExtendContextMenu/IContextMenuCallback/IContextMenuProvider.
+
+Rough shape:
+
+1. **When MMC wants a context menu**, it calls your `IExtendContextMenu::AddMenuItems` with a data object and a callback.
+2. You:
+
+   * Resolve the `NodeId` from the data object.
+   * Ask your `NodeBehavior` for `actions()`.
+   * For each `NodeAction`, call `IContextMenuCallback::AddItem` (or `IContextMenuProvider::InsertMenuItem` depending on style).
+   * At the same time, record a mapping of *MMC command ID* → `(NodeId, ActionId)` somewhere.
+
+In Rust:
+
+```rust
+/// Held on the snap-in, shared by IComponent/IComponentData/etc.
+struct CommandMap {
+    // mmc_cmd_id -> (node, action)
+    map: HashMap<i32, (NodeId, ActionId)>,
+    next_cmd_id: i32,
+}
+```
+
+In `AddMenuItems`:
+
+```rust
+fn add_menu_items(&mut self,
+    data_obj: &ComItf<dyn IDataObject>,
+    callback: &ComItf<dyn IContextMenuCallback>,
+    insertion: *mut MENUCALLBACKDATA,
+) -> ComResult<()> {
+
+    let node_id = self.node_id_from_data_object(data_obj)?;
+    let node = self.registry.get(node_id).ok_or(ComError::E_POINTER)?;
+    let actions = node.behavior.actions();
+
+    for action in actions {
+        let cmd_id = self.command_map.alloc(node_id, action.id);
+
+        // map NodeAction -> MMC C-style struct
+        let item = MMC_CONTEXTMENUITEM {
+            strName: to_wide(&action.label),
+            nCommandID: cmd_id,
+            lCommandID: cmd_id,
+            // flags based on style/scope...
+            ..Default::default()
+        };
+
+        callback.add_item(&item)?;
+    }
+
+    Ok(())
+}
+```
+
+Then in your `IExtendContextMenu::Command` or `ICommandProvider` method:
+
+```rust
+fn command(&mut self, command_id: i32, data_obj: &ComItf<dyn IDataObject>) -> ComResult<()> {
+    let (node_id, action_id) = self.command_map.resolve(command_id)
+        .ok_or(ComError::E_FAIL)?;
+
+    let behavior = self.registry.get_behavior(node_id);
+    behavior.invoke_action(action_id)
+        .map_err(|_| ComError::E_FAIL)
+}
+```
+
+So the MMC layer becomes:
+
+* “Menu shown?” ⇒ enumerate `NodeAction` items.
+* “Command invoked?” ⇒ ask the `NodeBehavior` to actually do it.
+
+You never stuff fat pointers into cookies; it’s all `NodeId` and `ActionId`.
+
+---
+
+## 4. Property sheets: NodePropertyPage → IExtendPropertySheet
+
+Property sheets in MMC are just Win32 property sheets plus a bit of COM. Conceptually:
+
+1. MMC calls your `IExtendPropertySheet::CreatePropertyPages(callback, handle, data_obj)`.
+2. You resolve the `NodeId`, ask `NodeBehavior` for `property_pages()`.
+
+```rust
+fn create_property_pages(
+    &mut self,
+    callback: &ComItf<dyn IPropertySheetCallback>,
+    handle: isize,
+    data_obj: &ComItf<dyn IDataObject>,
+) -> ComResult<()> {
+
+    let node_id = self.node_id_from_data_object(data_obj)?;
+    let node = self.registry.get(node_id).ok_or(ComError::E_POINTER)?;
+    let pages = node.behavior.property_pages();
+
+    for page in pages {
+        let hpage = self.build_property_sheet_page(node_id, page.id)?;
+        callback.add_page(hpage)?;
+    }
+
+    Ok(())
+}
+```
+
+`build_property_sheet_page` is where `winsafe` could shine, or you can keep doing raw `PROPSHEETPAGEW` like you did in the wizard code.
+
+The key design trick:
+
+* **Use `lParam` in `PROPSHEETPAGE` to store a tiny context struct**, e.g.:
+
+  ```rust
+  #[repr(C)]
+  struct PageCtx {
+      snapin: *const MMCSnapIn,
+      node_id: NodeId,
+      page_id: PageId,
+  }
+  ```
+
+* Allocate `Box<PageCtx>` → leak it into `lParam` so it survives as long as the page.
+
+* In the dialog proc (or `winsafe`-style handler), cast `lParam` back to `*mut PageCtx` and:
+
+  * On `WM_INITDIALOG` → call `NodeBehavior::load_page(page_id, sink)`.
+  * On `PSN_APPLY` (OK/Apply) → call `NodeBehavior::save_page(page_id, source)`.
+
+This keeps the per-page logic in your domain `NodeBehavior` land and leaves the dialog proc as a thin adapter that:
+
+* Pulls data from UI → `PageDataSource`.
+* Pushes data into UI ← `PageDataSink`.
+
+If you do decide to use `winsafe` for property sheets, it should simplify some of that boilerplate (creating pages, dealing with messages) while still letting you store a `PageCtx` pointer in `lParam`.
+
+---
+
+## 5. Lifetimes / “Rust quirks” mitigation
+
+You’ve already hit the big gotchas once:
+
+* Trait objects are fat pointers → you cannot stash them in MMC cookies.
+* COM objects are long-lived and moved only by pointer; Rust lifetimes don’t map directly.
+
+The patterns above intentionally avoid the worst pain:
+
+1. **No trait objects in cookies**
+   `NodeId`, `ActionId`, `PageId` are all thin `isize`/`i32` newtypes.
+
+2. **One authoritative registry in the snap-in root**
+   `MMCSnapIn` owns a `NodeRegistry`, `CommandMap`, etc.
+   Other COM objects (`IComponent`, `IDataObject`, `IExtend*` implementors) hold a raw `*const MMCSnapIn` backpointer (like you already did).
+
+3. **Stateful domain layer behind interior mutability**
+   When you need mutation from multiple COM entrypoints, stash your actual mutable domain state in `RefCell`/`RwLock`/`Mutex` inside the snap-in. From the outside, every COM call just borrows mutably from there.
+
+4. **Minimize `unsafe` to well-audited FFI helpers**
+   HGLOBAL, `GlobalLock`, `PROPSHEETPAGE`, `CreatePropertySheetPage`—all live in a small number of modules, not scattered.
+
+Compared to “translate C++ snap-in line-by-line,” this is more “treat MMC as a weird RPC/GUI adapter for your own state machine.”
+
+---
+
+## 6. Realistically: how to revive this without getting stuck
+
+If you reopen this repo and want actual progress instead of drowning in re-architecture, I’d probably:
+
+1. Keep your existing snap-in + node + IDataObject implementation, but:
+
+   * Keep the UB fixes you just committed.
+   * Add `NodeLabel` for display name caching.
+   * Add a tiny `CommandMap` and **one** hard-coded action per node, just to prove the IExtendContextMenu path.
+
+2. After that works:
+
+   * Introduce `NodeId` + `NodeRegistry` (if you haven’t yet).
+   * Add `NodeAction` + `NodeBehavior::actions()` only for the root node.
+   * Wire `IExtendContextMenu::AddMenuItems` / `Command` to `NodeBehavior::invoke_action` with something trivial like “Refresh” that just logs.
+
+3. Then:
+
+   * Add **one** property page for either the root or a specific node, with one text field bound to your `NodeLabel`.
+   * Implement `load_page` / `save_page` for that.
+
+Once that thin vertical slice works—context menu + property page for a single node type—you’re basically done with the hairy MMC plumbing. After that, it’s “just Rust” to bolt on SMBus enumeration and sensor logic.
+
+And you’ll get exactly what you described: your *business logic* lives in good types and methods, and the MMC layer is a kinda ugly but contained adapter that you rarely have to think about.

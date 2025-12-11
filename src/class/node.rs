@@ -35,7 +35,7 @@ pub struct Node {
 
 impl Default for Node {
     fn default() -> Self {
-        Node {
+        Self {
             _owner: std::ptr::null(),
             node_type: NodeType::Folder,
             display_name: String::new(),
@@ -58,33 +58,37 @@ impl Node {
     
     // Calls to this function release the pointer to the PCWSTR and allocate a new one.
     pub fn pcwstr(&mut self) -> ComResult<ComPCWSTR> {
-        if self.pcwstr_name.is_some() {
-            unsafe { CoTaskMemFree(Some(self.pcwstr_name.unwrap().0 as *const _)); }
+        if let Some(old) = self.pcwstr_name {
+            unsafe { CoTaskMemFree(Some(old.0 as *const _)); }
+            self.pcwstr_name = None;
         }
         
         log::debug!("Converting string \"{}\" to PCWSTR", self.display_name);
         
-        let str: Vec<u16> = self.display_name
+        let wide: Vec<u16> = self.display_name
             .to_owned()
             .encode_utf16()
             .chain(std::iter::once(0))
             .collect();
         
-        let size = str.len() * std::mem::size_of::<u16>();
-        let olestrbuf = unsafe { CoTaskMemAlloc(size) };
-        
+        let size_bytes = wide.len() * std::mem::size_of::<u16>();
+        let olestrbuf = unsafe { CoTaskMemAlloc(size_bytes) };
         if olestrbuf.is_null() {
             log::error!("CoTaskMemAlloc returns null pointer");
             return Err(ComError::E_FAIL);
         }
         
         unsafe {
-            std::ptr::copy_nonoverlapping(str.as_ptr(), olestrbuf as *mut u16, str.len());
+            std::ptr::copy_nonoverlapping(
+                wide.as_ptr(),
+                olestrbuf as *mut u16,
+                wide.len());
         }
+
+        let ptr = PCWSTR::from_raw(olestrbuf as *const u16);
+        self.pcwstr_name = Some(ptr);
         
-        self.pcwstr_name = Some(PCWSTR::from_raw(olestrbuf as *const u16));
-        
-        Ok(ComPCWSTR(PCWSTR::from_raw(olestrbuf as *const u16)))
+        Ok(ComPCWSTR(ptr))
     }
 }
 
@@ -133,16 +137,13 @@ impl IDataObject for Node {
                                 
                                 let node_name_utf16: Vec<u16> = self.display_name.encode_utf16().chain(std::iter::once::<u16>(0)).collect();
                                 
-                                let node_name_utf16_size = node_name_utf16.len() * std::mem::size_of::<u16>();
+                                std::ptr::copy_nonoverlapping(
+                                    node_name_utf16.as_ptr(),
+                                    ptr as *mut u16,
+                                    node_name_utf16.len(),
+                                );
                                 
-                                std::ptr::copy_nonoverlapping(node_name_utf16.as_ptr(), ptr as *mut u16, node_name_utf16_size);
-                                
-                                GlobalUnlock((*pmedium).0.Anonymous.hGlobal);
-                                
-                                if GetLastError() != NO_ERROR {
-                                    log::error!("Failed to unlock HGLOBAL");
-                                    return Err(ComError::E_FAIL);
-                                }
+                                global_unlock_checked((*pmedium).0.Anonymous.hGlobal)?;
                                 
                             }
                             _ => {
@@ -172,16 +173,7 @@ impl IDataObject for Node {
                                 
                                 std::ptr::copy_nonoverlapping(&CLSID_MMCSnapIn as *const _ as *const u8, ptr as *mut u8, guid_size_in_bytes);
 
-                                match GlobalUnlock((*pmedium).0.Anonymous.hGlobal).0 {
-                                    0 => {
-                                        let global_error = GetLastError();
-                                        if global_error != NO_ERROR {
-                                            log::error!("Failed to unlock HGLOBAL: {:?}", global_error);
-                                            return Err(ComError::E_FAIL);
-                                        }
-                                    }
-                                    _ => {}
-                                }
+                                global_unlock_checked((*pmedium).0.Anonymous.hGlobal)?;
                             }
                             _ => {
                                 log::error!("Unsupported TYMED: {:?}", tymed);
@@ -206,16 +198,7 @@ impl IDataObject for Node {
                                 let guid_size_in_bytes = std::mem::size_of::<GUID>();
                                 std::ptr::copy_nonoverlapping(&CLSID_MMCSnapIn as *const _ as *const u8, ptr as *mut u8, guid_size_in_bytes);
 
-                                match GlobalUnlock((*pmedium).0.Anonymous.hGlobal).0 {
-                                    0 => {
-                                        let global_error = GetLastError();
-                                        if global_error != NO_ERROR {
-                                            log::error!("Failed to unlock HGLOBAL: {:?}", global_error);
-                                            return Err(ComError::E_FAIL);
-                                        }
-                                    }
-                                    _ => {}
-                                }
+                                global_unlock_checked((*pmedium).0.Anonymous.hGlobal)?;
                             }
                             _ => {
                                 log::error!("Unsupported TYMED: {:?}", tymed);
@@ -285,6 +268,18 @@ impl IDataObject for Node {
     fn enum_d_advise(&self) -> ComResult<()> {
         Ok(())
     }
+}
+
+fn global_unlock_checked(hglobal: HGLOBAL) -> ComResult<()> {
+    let res = unsafe { GlobalUnlock(hglobal) };
+    if res.0 == 0 {
+        let err = unsafe { GetLastError() };
+        if err != NO_ERROR {
+            log::error!("Failed to unlock HGLOBAL: {:?}", err);
+            return Err(ComError::E_FAIL);
+        }
+    }
+    Ok(())
 }
 
 #[repr(i32)]
